@@ -11,9 +11,13 @@ jobs:
       - uses: actions/checkout@v2
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.2' # Assurez-vous d'utiliser votre version Flutter
+          # Utilise la dernière version stable.
+          channel: 'stable' 
+          # On peut aussi tenter une version spécifique récente si le 'stable' ne suffit pas
+          # flutter-version: '3.22.3' 
       - name: Install dependencies
-        run: flutter pub get
+        # Ajout de l'option "--no-version-check" pour ignorer le conflit pubspec/Dart SDK
+        run: flutter pub get --no-version-check 
       - name: Run tests
         run: flutter test
       - name: Analyze code
