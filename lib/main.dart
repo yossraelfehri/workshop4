@@ -23,7 +23,8 @@ class _DevFakeClient {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await dotenv.load();
+    // Explicitly load the .env asset packaged with the app.
+    await dotenv.load(fileName: '.env');
   } catch (e) {
     // If .env is missing (especially on web), don't crash — fall back to dev fake client.
     // flutter_dotenv throws a FileNotFoundError on web when assets/.env is not present.
@@ -37,7 +38,10 @@ Future<void> main() async {
   final key = dotenv.isInitialized ? dotenv.env['SUPABASE_ANON_KEY'] : null;
 
   if (url != null && key != null && url.isNotEmpty && key.isNotEmpty) {
+    // Initialize Supabase with the loaded values.
     await Supabase.initialize(url: url, anonKey: key);
+    // ignore: avoid_print
+    print('Supabase initialized with URL: ${url}');
     runApp(const WaitingRoomApp());
   } else {
     // Run in dev mode without Supabase configured
@@ -65,13 +69,24 @@ class WaitingRoomApp extends StatelessWidget {
   }
 }
 
-class WaitingRoomScreen extends StatelessWidget {
+class WaitingRoomScreen extends StatefulWidget {
   const WaitingRoomScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final TextEditingController controller = TextEditingController();
+  State<WaitingRoomScreen> createState() => _WaitingRoomScreenState();
+}
 
+class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
+  final TextEditingController controller = TextEditingController();
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Waiting Room'),
@@ -111,12 +126,17 @@ class WaitingRoomScreen extends StatelessWidget {
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: () {
-                    final name = controller.text.trim();
-                    if (name.isNotEmpty) {
-                      context.read<QueueProvider>().addClient(name);
-                      controller.clear();
-                    }
-                  },
+                      final name = controller.text.trim();
+                      // Debug: log tap during tests
+                      if (context.read<QueueProvider>().isTesting) {
+                        // ignore: avoid_print
+                        print('Add button tapped with name="$name"');
+                      }
+                      if (name.isNotEmpty) {
+                        context.read<QueueProvider>().addClient(name);
+                        controller.clear();
+                      }
+                    },
                   child: const Text('Add'),
                 ),
               ],
@@ -129,6 +149,13 @@ class WaitingRoomScreen extends StatelessWidget {
             Expanded(
               child: Consumer<QueueProvider>(
                 builder: (context, provider, _) {
+                  // Debug: print provider state during tests to help diagnose
+                  // why widget tests sometimes don't observe UI updates.
+                  if (provider.isTesting) {
+                    // ignore: avoid_print
+                    print('WaitingRoomScreen.build - provider.clients=${provider.clients.map((c) => c.name).toList()}');
+                  }
+
                   if (provider.clients.isEmpty) {
                     return const Center(child: Text('No one in queue yet...'));
                   }
@@ -142,7 +169,9 @@ class WaitingRoomScreen extends StatelessWidget {
                         child: ListTile(
                           title: Text(client.name),
                           subtitle: Text(
-                            client.createdAt.toString().split(' ')[0],
+                            client.lat == null
+                                ? '📍 Location not captured'
+                                : '📍 ${client.lat!.toStringAsFixed(4)}, ${client.lng!.toStringAsFixed(4)}',
                             style: const TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                           trailing: IconButton(
@@ -159,15 +188,16 @@ class WaitingRoomScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            ElevatedButton.icon(
+            OutlinedButton.icon(
               key: const Key('nextClientButton'),
               onPressed: () {
                 context.read<QueueProvider>().nextClient();
               },
-              icon: const Icon(Icons.arrow_forward),
+              icon: const Icon(Icons.arrow_forward, color: Colors.green),
               label: const Text('Next Client'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.green,
+                side: const BorderSide(color: Colors.green),
               ),
             ),
           ],
